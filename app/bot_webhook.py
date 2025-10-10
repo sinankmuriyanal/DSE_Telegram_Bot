@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request
 import os
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, Bot
+from telegram import Update, Bot
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+
 
 app = FastAPI()
 
