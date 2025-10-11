@@ -12,6 +12,10 @@ API_URL = os.getenv("API_URL")  # your LLM API endpoint
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
+@app.get("/")
+async def root():
+    return {"status": "Bot API running"}
+
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
