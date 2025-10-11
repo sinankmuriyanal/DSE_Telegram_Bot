@@ -3,6 +3,7 @@ import os
 import requests
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from app.formatter import markdown_to_telegram_html
 
 
 app = FastAPI()
@@ -31,5 +32,10 @@ async def telegram_webhook(req: Request):
         except Exception as e:
             answer = f"Error: {str(e)}"
 
-        await bot.send_message(chat_id=update.message.chat_id, text=answer)
+         # 🔹 Convert Markdown → Telegram HTML
+        answer = markdown_to_telegram_html(answer)
+
+        # 🔹 Send formatted message
+        await bot.send_message(chat_id=update.message.chat_id, text=answer, parse_mode="HTML")
+
     return {"status": "ok"}
