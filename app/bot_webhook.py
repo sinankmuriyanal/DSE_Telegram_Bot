@@ -26,7 +26,7 @@ async def telegram_webhook(req: Request):
     # handle text message
     if update.message and update.message.text:
         user_query = update.message.text
-        await bot.send_message(chat_id=update.message.chat_id, text="Thinking...")
+        await bot.send_message(chat_id=update.message.chat_id, text="...")
 
         # Call LLM API
         try:
