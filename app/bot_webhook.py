@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import os
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, CallbackQueryHandler
 from app.formatter import markdown_to_telegram_html
 
 app = FastAPI()
@@ -10,27 +10,51 @@ app = FastAPI()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_URL = os.getenv("API_URL")  # your LLM API endpoint
 
-# Build the async Telegram Application once
+# Build the Telegram Application once
 application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+# -----------------------------
+# Feedback callback handler
+# -----------------------------
+async def feedback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # remove loading spinner
 
+    callback_data = query.data
+    if callback_data.startswith("feedback:"):
+        _, chat_log_id, value = callback_data.split(":")
+        is_useful = bool(int(value))
+        FEEDBACK_API = os.getenv("API_URL") + "/feedback"
+        try:
+            requests.post(FEEDBACK_API, json={"chat_log_id": chat_log_id, "is_useful": is_useful})
+        except Exception as e:
+            print(f"Feedback post failed: {e}")
+
+    # Remove feedback buttons after clicking
+    await query.edit_message_reply_markup(reply_markup=None)
+
+# Add feedback handler
+application.add_handler(CallbackQueryHandler(feedback_handler))
+
+# -----------------------------
 # Root endpoint for testing
+# -----------------------------
 @app.get("/")
 async def root():
     return {"status": "Bot API running"}
 
-
+# -----------------------------
 # Webhook endpoint
+# -----------------------------
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, application.bot)
 
-    # Handle text messages
     if update.message and update.message.text:
         user_query = update.message.text.strip()
 
-        # First message / greeting handling
+        # Handle /start or greetings
         if user_query.lower() in ["/start", "hi", "hello"]:
             await application.bot.send_message(
                 chat_id=update.message.chat.id,
@@ -38,12 +62,12 @@ async def telegram_webhook(req: Request):
             )
             return {"status": "ok"}
 
-        # Otherwise, call your LLM API
+        # Call your LLM API
         try:
             response = requests.post(API_URL, json={"query": user_query})
             resp_json = response.json() if response.status_code == 200 else {}
             answer = resp_json.get("answer", "Sorry, I couldn't process that.")
-            chat_log_id = resp_json.get("chat_log_id")  # Optional for feedback
+            chat_log_id = resp_json.get("chat_log_id")
         except Exception as e:
             answer = f"Error: {str(e)}"
             chat_log_id = None
@@ -71,27 +95,3 @@ async def telegram_webhook(req: Request):
         )
 
     return {"status": "ok"}
-
-
-# Feedback callback handler
-async def feedback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()  # remove loading spinner
-
-    callback_data = query.data
-    if callback_data.startswith("feedback:"):
-        _, chat_log_id, value = callback_data.split(":")
-        is_useful = bool(int(value))
-        FEEDBACK_API = os.getenv("API_URL") + "/feedback"
-        try:
-            requests.post(FEEDBACK_API, json={"chat_log_id": chat_log_id, "is_useful": is_useful})
-        except Exception as e:
-            print(f"Feedback post failed: {e}")
-
-    # Optionally, remove feedback buttons
-    await query.edit_message_reply_markup(reply_markup=None)
-
-
-# Add the CallbackQueryHandler to the Telegram application
-application.add_handler(CallbackQueryHandler(feedback_handler))
-

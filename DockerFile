@@ -2,6 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Copy app and requirements
 COPY ./app /app/app
 COPY ./requirements.txt /app/requirements.txt
 COPY ./.env /app/.env
@@ -10,4 +11,5 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 EXPOSE 7860
 
+# Start FastAPI via Uvicorn
 CMD ["uvicorn", "app.bot_webhook:app", "--host", "0.0.0.0", "--port", "7860"]
