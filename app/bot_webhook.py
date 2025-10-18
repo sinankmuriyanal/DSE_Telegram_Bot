@@ -28,6 +28,14 @@ async def telegram_webhook(req: Request):
         user_query = update.message.text
         await bot.send_message(chat_id=update.message.chat_id, text="...")
 
+        if user_query.lower() in ["/start"]:
+            answer = "Hi! How can I help you today?"
+            await bot.send_message(
+                chat_id=update.message.chat_id,
+                text=answer
+            )
+            return {"status": "ok"}
+        
         # Call LLM API
         try:
             response = requests.post(API_URL, json={"query": user_query})
