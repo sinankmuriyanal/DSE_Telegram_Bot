@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Request
 import os
 import requests
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from app.formatter import markdown_to_telegram_html
 
 app = FastAPI()
@@ -10,30 +10,40 @@ app = FastAPI()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_URL = os.getenv("API_URL")  # your LLM API endpoint
 
+# Build the async Telegram Application once
 application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 
+# Root endpoint for testing
 @app.get("/")
 async def root():
     return {"status": "Bot API running"}
 
 
+# Webhook endpoint
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, application.bot)
 
-    # handle text message
+    # Handle text messages
     if update.message and update.message.text:
-        user_query = update.message.text
-        await application.bot.send_message(chat_id=update.message.chat_id, text="...")
-        
-        # Call LLM API
+        user_query = update.message.text.strip()
+
+        # First message / greeting handling
+        if user_query.lower() in ["/start", "hi", "hello"]:
+            await application.bot.send_message(
+                chat_id=update.message.chat.id,
+                text="Hi! How can I help you today?"
+            )
+            return {"status": "ok"}
+
+        # Otherwise, call your LLM API
         try:
             response = requests.post(API_URL, json={"query": user_query})
             resp_json = response.json() if response.status_code == 200 else {}
             answer = resp_json.get("answer", "Sorry, I couldn't process that.")
-            chat_log_id = resp_json.get("chat_log_id")  # Use actual chat_log_id from API
+            chat_log_id = resp_json.get("chat_log_id")  # Optional for feedback
         except Exception as e:
             answer = f"Error: {str(e)}"
             chat_log_id = None
@@ -41,7 +51,8 @@ async def telegram_webhook(req: Request):
         # Convert Markdown → Telegram HTML
         answer = markdown_to_telegram_html(answer)
 
-        # Create feedback buttons if chat_log_id is available
+        # Feedback buttons
+        reply_markup = None
         if chat_log_id:
             keyboard = [
                 [
@@ -50,12 +61,10 @@ async def telegram_webhook(req: Request):
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-        else:
-            reply_markup = None
 
-        # Send message with feedback buttons
+        # Send answer
         await application.bot.send_message(
-            chat_id=update.message.chat_id,
+            chat_id=update.message.chat.id,
             text=answer,
             parse_mode="HTML",
             reply_markup=reply_markup
@@ -64,13 +73,13 @@ async def telegram_webhook(req: Request):
     return {"status": "ok"}
 
 
-# Telegram CallbackQueryHandler for feedback
+# Feedback callback handler
 async def feedback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # remove the loading spinner in Telegram
+    await query.answer()  # remove loading spinner
 
     callback_data = query.data
-    if callback_data and callback_data.startswith("feedback:"):
+    if callback_data.startswith("feedback:"):
         _, chat_log_id, value = callback_data.split(":")
         is_useful = bool(int(value))
         FEEDBACK_API = os.getenv("API_URL") + "/feedback"
@@ -79,10 +88,10 @@ async def feedback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"Feedback post failed: {e}")
 
-    # Optionally, you can edit the message to show feedback was received
+    # Optionally, remove feedback buttons
     await query.edit_message_reply_markup(reply_markup=None)
 
 
-# Run Telegram Application (for local testing or as part of FastAPI startup)
-application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+# Add the CallbackQueryHandler to the Telegram application
 application.add_handler(CallbackQueryHandler(feedback_handler))
+
