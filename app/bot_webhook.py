@@ -10,8 +10,7 @@ app = FastAPI()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_URL = os.getenv("API_URL")  # your LLM API endpoint
 
-bot = Bot(token=TELEGRAM_TOKEN)
-
+application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 @app.get("/")
 async def root():
@@ -21,16 +20,16 @@ async def root():
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
-    update = Update.de_json(data, bot)
+    update = Update.de_json(data, application.bot)
 
     # handle text message
     if update.message and update.message.text:
         user_query = update.message.text
-        await bot.send_message(chat_id=update.message.chat_id, text="...")
+        await application.bot.send_message(chat_id=update.message.chat_id, text="...")
 
         if user_query.lower() in ["/start"]:
             answer = "Hi! How can I help you today?"
-            await bot.send_message(
+            await application.bot.send_message(
                 chat_id=update.message.chat_id,
                 text=answer
             )
@@ -62,7 +61,7 @@ async def telegram_webhook(req: Request):
             reply_markup = None
 
         # Send message with feedback buttons
-        await bot.send_message(
+        await application.bot.send_message(
             chat_id=update.message.chat_id,
             text=answer,
             parse_mode="HTML",
